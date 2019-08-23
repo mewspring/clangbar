@@ -10,9 +10,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/kr/pretty"
 	"github.com/mewkiz/pkg/jsonutil"
 	"github.com/mewkiz/pkg/pathutil"
 	"github.com/mewkiz/pkg/term"
+	"github.com/mewspring/cc"
 	"github.com/pkg/errors"
 )
 
@@ -55,8 +57,30 @@ func genFileInteractionGraph(funcUses []*proginfo.FuncUse) string {
 	es := make(map[Edge]bool)
 	for _, funcUse := range funcUses {
 		funcFileName := pathutil.FileName(funcUse.FuncLoc.File)
+		if !strings.HasPrefix(funcUse.FuncLoc.File, "Source/") {
+			// Use full filepath if file is not within the main Source directory.
+			funcFileName = funcUse.FuncLoc.File
+		}
 		for _, use := range funcUse.Uses {
+			if strings.HasPrefix(use.DefLoc.File, "/usr/include/") || strings.Contains(use.DefLoc.File, "/lib64/gcc/") {
+				// Skip standard includes.
+				continue
+			}
+			if strings.HasPrefix(use.Name, "__builtin_") || strings.HasPrefix(use.Name, "__sync_") {
+				// Skip builtin identifiers.
+				continue
+			}
+			zero := cc.Location{}
+			if use.DefLoc == zero {
+				pretty.Println(use)
+				panic("builtin identifier?")
+			}
 			useFileName := pathutil.FileName(use.DefLoc.File)
+			if !strings.HasPrefix(use.DefLoc.File, "Source/") {
+				// Use full filepath if file is not within the main Source
+				// directory.
+				useFileName = use.DefLoc.File
+			}
 			edge := Edge{
 				From: funcFileName,
 				To:   useFileName,
