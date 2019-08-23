@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-	"play/clangbar/proginfo"
 	"sort"
 	"strings"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/mewkiz/pkg/pathutil"
 	"github.com/mewkiz/pkg/term"
 	"github.com/mewspring/cc"
+	"github.com/mewspring/clangbar/proginfo"
 	"github.com/pkg/errors"
 )
 

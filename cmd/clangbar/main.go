@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"play/clangbar/proginfo"
 	"strings"
 
 	"github.com/go-clang/clang-v3.9/clang"
@@ -14,6 +13,7 @@ import (
 	"github.com/mewkiz/pkg/pathutil"
 	"github.com/mewkiz/pkg/term"
 	"github.com/mewspring/cc"
+	"github.com/mewspring/clangbar/proginfo"
 	"github.com/pkg/errors"
 )
 
