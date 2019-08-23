@@ -6,10 +6,10 @@ import (
 	"log"
 	"os"
 
+	"github.com/go-clang/clang-v3.9/clang"
 	"github.com/kr/pretty"
 	"github.com/mewkiz/pkg/term"
 	"github.com/mewspring/cc"
-	"github.com/mewspring/go-clang/clang"
 )
 
 var (
@@ -26,11 +26,12 @@ func main() {
 	for _, srcPath := range flag.Args() {
 		// Parse source file into AST.
 		dbg.Printf("=== [ %v ] ===\n", srcPath)
-		root, err := cc.ParseFile(srcPath, "-D DEVILUTION_STUB", "-D DEVILUTION_ENGINE", "-I./SourceS", "-I/usr/lib/clang/8.0.1/include")
+		file, err := cc.ParseFile(srcPath, "-D DEVILUTION_STUB", "-D DEVILUTION_ENGINE", "-I./SourceS", "-I/usr/lib/clang/8.0.1/include")
 		if err != nil {
 			warn.Printf("%+v", err)
 		}
-		analyze(root)
+		defer file.Close()
+		analyze(file.Root)
 	}
 }
 
@@ -55,33 +56,47 @@ func analyze(root *cc.Node) {
 			uses: uses,
 		}
 		funcUses = append(funcUses, funcUse)
-		fmt.Printf("uses in function %v (at %q)\n", f.Body.Spelling(), f.Loc)
-		pretty.Println(uses)
+		//fmt.Printf("uses in function %v (at %q)\n", f.Body.Spelling(), f.Loc)
+		//pretty.Println(uses)
 	}
-	globalDefs := make(map[string]*cc.Node)
+	// global variable and function definitions.
+	defs := make(map[string]*cc.Node)
 	for _, global := range globals {
 		name := global.Body.Spelling()
-		if old, ok := globalDefs[name]; ok {
-			panic(fmt.Errorf("global variable %q already present; old %v, new %v", name, old, global))
+		if old, ok := defs[name]; ok {
+			warn.Printf("global variable %q already present; old %v, new %v", name, old, global)
+			continue
 		}
-		globalDefs[name] = global
+		defs[name] = global
+	}
+	for _, fn := range funcs {
+		name := fn.Body.Spelling()
+		if old, ok := defs[name]; ok {
+			warn.Printf("function %q already present; old %v, new %v", name, old, fn)
+			continue
+		}
+		defs[name] = fn
 	}
 	for _, funcUse := range funcUses {
-		resolveExternalDefs(funcUse, globalDefs)
+		resolveExternalDefs(funcUse, defs)
 	}
-	pretty.Println(funcUses)
+	for _, funcUse := range funcUses {
+		fmt.Printf("uses in function %v (at %q)\n", funcUse.fn.Body.Spelling(), funcUse.fn.Loc)
+		pretty.Println(funcUse.uses)
+	}
 }
 
-func resolveExternalDefs(funcUse *FuncUse, globalDefs map[string]*cc.Node) {
+func resolveExternalDefs(funcUse *FuncUse, defs map[string]*cc.Node) {
 	zero := cc.Location{}
 	for _, use := range funcUse.uses {
 		if use.DefLoc != zero {
 			// Already has location of definition.
 			continue
 		}
-		global, ok := globalDefs[use.Name]
+		global, ok := defs[use.Name]
 		if !ok {
 			warn.Printf("unable to resolve use of external global variable %q, as used in function %q (at %q)", use.Name, funcUse.fn.Body.Spelling(), funcUse.fn.Loc)
+			continue
 		}
 		use.DefLoc = global.Loc
 	}
@@ -163,7 +178,7 @@ func isGlobal(n clang.Cursor) bool {
 	parent := n.SemanticParent()
 	for {
 		switch parent.Kind() {
-		case clang.Cursor_UnexposedDecl, clang.Cursor_Namespace, clang.Cursor_StructDecl, clang.Cursor_ClassTemplate, clang.Cursor_ClassTemplatePartialSpecialization, clang.Cursor_ClassDecl:
+		case clang.Cursor_UnexposedDecl, clang.Cursor_Namespace, clang.Cursor_StructDecl, clang.Cursor_ClassTemplate, clang.Cursor_ClassTemplatePartialSpecialization, clang.Cursor_ClassDecl, clang.Cursor_EnumDecl:
 			// continue traversing parents.
 		case clang.Cursor_TranslationUnit:
 			// global
